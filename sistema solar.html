@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema Solar 3D con Parallax</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: Arial; }
+        
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: white; z-index: 1000;
+            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px;
+            border: 1px solid #ff8800; max-width: 300px; backdrop-filter: blur(5px);
+        }
+        
+        h1 { color: #ff9900; margin-bottom: 10px; font-size: 1.5rem; }
+        p { color: #ccc; font-size: 0.9rem; margin-bottom: 5px; }
+        
+        .status {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(0,40,80,0.8); padding: 10px 15px; border-radius: 10px;
+            color: white; display: flex; align-items: center; gap: 10px;
+        }
+        
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #00ff00; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        button {
+            background: #ff6600; color: white; border: none; padding: 6px 10px;
+            border-radius: 5px; cursor: pointer; font-size: 0.8rem; transition: all 0.3s;
+        }
+        button:hover { background: #ff8800; transform: translateY(-2px); }
+        video { display: none; }
+        
+        .planet-label {
+            position: absolute; color: white; font-size: 12px;
+            background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 3px;
+            white-space: nowrap; pointer-events: none;
+        }
+        
+        .controls { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+        #planet-info { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,136,0,0.3); }
+    </style>
+</head>
+
+<body>
+    <video id="video" autoplay playsinline></video>
+    
+    <div id="ui">
+        <h1>SISTEMA SOLAR 3D</h1>
+        <p>• Planetas orbitando el Sol</p>
+        <p>• Efecto parallax con movimiento de cabeza</p>
+        <p>• Texturas en alta resolución</p>
+        <p>• Velocidades orbitales proporcionales</p>
+        
+        <div id="planet-info">
+            <p id="selected-planet">Haz clic en un planeta para más información</p>
+        </div>
+        
+        <div class="controls">
+            <button id="speed-1x">Velocidad 1x</button>
+            <button id="speed-10x">Velocidad 10x</button>
+            <button id="speed-100x">Velocidad 100x</button>
+            <button id="pause">Pausar</button>
+        </div>
+    </div>
+    
+    <div class="status">
+        <div class="dot"></div>
+        <span>HEAD TRACKING ACTIVO</span>
+    </div>
+
+    <a-scene background="color: #000011" cursor="rayOrigin: mouse">
+        
+        <!-- Cámara -->
+        <a-entity id="camera-rig" position="0 1.6 0">
+            <a-camera id="main-camera" fov="75">
+                <a-cursor fuse="true" fuse-timeout="500" raycaster="objects: .clickable"></a-cursor>
+            </a-camera>
+        </a-entity>
+        
+        <!-- Luces -->
+        <a-entity light="type: directional; intensity: 1.5; color: #ffffff; castShadow: true"></a-entity>
+        <a-entity light="type: ambient; intensity: 0.2"></a-entity>
+        <a-entity light="type: hemisphere; intensity: 0.8; groundColor: #003366"></a-entity>
+        
+        <!-- Sistema Solar -->
+        <a-entity id="solar-system" position="0 0 -25" scale="0.9 0.9 0.9">
+            
+            <!-- SOL -->
+            <a-entity id="sun">
+                <a-sphere radius="4.5" class="clickable"
+                    material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_sun.jpg; roughness: 0.8"
+                    shadow="receive: false; cast: true"
+                    animation="property: rotation; to: 0 360 0; dur: 30000; loop: true"
+                    data-name="SOL"
+                    data-info="Estrella central - Diámetro: 1.39M km - Temperatura: 5,500°C">
+                </a-sphere>
+                <a-entity light="type: point; intensity: 3.5; distance: 150; color: #ffaa66"></a-entity>
+            </a-entity>
+            
+            <!-- ÓRBITAS -->
+            <a-entity id="orbits"></a-entity>
+            
+            <!-- PLANETAS -->
+            <!-- MERCURIO -->
+            <a-entity class="orbit-container" data-orbit-duration="8.8" data-distance="9">
+                <a-entity id="mercury" class="planet clickable" position="9 0 0"
+                    data-name="MERCURIO"
+                    data-info="Órbita más rápida: 88 días terrestres - Sin lunas - Temperatura extrema: -173°C a 427°C">
+                    <a-sphere radius="0.38"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_mercury.jpg; roughness: 0.95">
+                    </a-sphere>
+                    <a-text value="MERCURIO" position="0 0.7 0" color="#ff9900" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- VENUS -->
+            <a-entity class="orbit-container" data-orbit-duration="22.5" data-distance="12">
+                <a-entity id="venus" class="planet clickable" position="12 0 0"
+                    data-name="VENUS"
+                    data-info="Órbita: 225 días - Rotación retrógrada - Sin lunas - Atmósfera de CO₂">
+                    <a-sphere radius="0.55"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_venus_surface.jpg">
+                    </a-sphere>
+                    <a-text value="VENUS" position="0 0.8 0" color="#ffcc99" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- TIERRA -->
+            <a-entity class="orbit-container" data-orbit-duration="36.5" data-distance="15">
+                <a-entity id="earth" class="planet clickable" position="15 0 0"
+                    data-name="TIERRA"
+                    data-info="Órbita: 365.25 días - 1 luna - Inclinación axial: 23.5° - Único planeta con vida">
+                    <a-sphere radius="0.6"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_earth_clouds.jpg">
+                    </a-sphere>
+                    <a-sphere radius="0.605" material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_earth_clouds.jpg; transparent: true; opacity: 0.3">
+                    </a-sphere>
+                    <a-entity class="moon-orbit" position="0 0 0">
+                        <a-entity position="1.2 0 0">
+                            <a-sphere radius="0.12" material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_moon.jpg">
+                            </a-sphere>
+                        </a-entity>
+                    </a-entity>
+                    <a-text value="TIERRA" position="0 0.9 0" color="#4fc3f7" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- MARTE -->
+            <a-entity class="orbit-container" data-orbit-duration="68.7" data-distance="18">
+                <a-entity id="mars" class="planet clickable" position="18 0 0"
+                    data-name="MARTE"
+                    data-info="Órbita: 687 días - 2 lunas - El planeta rojo - Monte Olimpo: volcán más grande">
+                    <a-sphere radius="0.5"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_mars.jpg">
+                    </a-sphere>
+                    <a-text value="MARTE" position="0 0.8 0" color="#ff6666" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- JÚPITER -->
+            <a-entity class="orbit-container" data-orbit-duration="433.3" data-distance="23">
+                <a-entity id="jupiter" class="planet clickable" position="23 0 0"
+                    data-name="JÚPITER"
+                    data-info="Órbita: 4,333 días - 79 lunas - Gigante gaseoso - Gran Mancha Roja">
+                    <a-sphere radius="1.1"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_jupiter.jpg">
+                    </a-sphere>
+                    <a-text value="JÚPITER" position="0 1.5 0" color="#ff9966" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- SATURNO -->
+            <a-entity class="orbit-container" data-orbit-duration="1075.9" data-distance="29">
+                <a-entity id="saturn" class="planet clickable" position="29 0 0"
+                    data-name="SATURNO"
+                    data-info="Órbita: 10,759 días - 82 lunas - Sistema de anillos - Menor densidad que el agua">
+                    <a-sphere radius="0.9"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_saturn.jpg">
+                    </a-sphere>
+                    <a-torus radius="1.5" tube="0.05" rotation="-80 0 0"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/8k_saturn_ring_alpha.png; transparent: true">
+                    </a-torus>
+                    <a-text value="SATURNO" position="0 1.3 0" color="#ffcc99" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- URANO -->
+            <a-entity class="orbit-container" data-orbit-duration="3068.5" data-distance="35">
+                <a-entity id="uranus" class="planet clickable" position="35 0 0"
+                    data-name="URANO"
+                    data-info="Órbita: 30,685 días - 27 lunas - Rotación lateral (98°) - Gigante de hielo">
+                    <a-sphere radius="0.75"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/2k_uranus.jpg">
+                    </a-sphere>
+                    <a-text value="URANO" position="0 1.0 0" color="#88ccff" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+            <!-- NEPTUNO -->
+            <a-entity class="orbit-container" data-orbit-duration="6019" data-distance="41">
+                <a-entity id="neptune" class="planet clickable" position="41 0 0"
+                    data-name="NEPTUNO"
+                    data-info="Órbita: 60,190 días - 14 lunas - Vientos más rápidos: 2,100 km/h">
+                    <a-sphere radius="0.7"
+                        material="src: https://cdn.jsdelivr.net/gh/Danielcreux/texturas/2k_neptune.jpg">
+                    </a-sphere>
+                    <a-text value="NEPTUNO" position="0 1.0 0" color="#3366ff" visible="false"></a-text>
+                </a-entity>
+            </a-entity>
+            
+        </a-entity>
+        
+        <!-- Fondo -->
+        <a-entity id="stars"></a-entity>
+        <a-entity id="nebulae"></a-entity>
+
+    </a-scene>
+
+    <script>
+        // Configuración
+        let speedMultiplier = 1;
+        let isPaused = false;
+        let faceMesh;
+        let smoothX = 0;
+        let smoothY = 0;
+        const parallaxIntensity = 1.5;
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', init);
+        
+        function init() {
+            createStars();
+            createOrbits();
+            setupPlanetInfo();
+            setupControls();
+            startOrbits();
+            setupHeadTracking();
+            setupZoom();
+            updateButtonStates('speed-1x');
+        }
+        
+        function createStars() {
+            const stars = document.getElementById('stars');
+            for (let i = 0; i < 1000; i++) {
+                const star = document.createElement('a-sphere');
+                const distance = 80 + Math.random() * 200;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                
+                star.setAttribute('position', {
+                    x: distance * Math.sin(phi) * Math.cos(theta),
+                    y: distance * Math.sin(phi) * Math.sin(theta),
+                    z: distance * Math.cos(phi)
+                });
+                
+                star.setAttribute('radius', Math.random() * 0.05 + 0.02);
+                star.setAttribute('material', {
+                    color: '#ffffff',
+                    emissive: '#ffffff',
+                    emissiveIntensity: Math.random() * 0.5 + 0.3
+                });
+                
+                stars.appendChild(star);
+            }
+        }
+        
+        function createOrbits() {
+            const orbits = document.getElementById('orbits');
+            const distances = [9, 12, 15, 18, 23, 29, 35, 41];
+            
+            distances.forEach(distance => {
+                const orbit = document.createElement('a-ring');
+                orbit.setAttribute('radius-inner', distance - 0.05);
+                orbit.setAttribute('radius-outer', distance + 0.05);
+                orbit.setAttribute('rotation', '-90 0 0');
+                orbit.setAttribute('material', {
+                    color: '#4488ff',
+                    transparent: true,
+                    opacity: 0.05
+                });
+                orbits.appendChild(orbit);
+            });
+        }
+        
+        function startOrbits() {
+            document.querySelectorAll('.orbit-container').forEach(container => {
+                const duration = parseFloat(container.getAttribute('data-orbit-duration'));
+                container.setAttribute('animation', {
+                    property: 'rotation',
+                    to: '0 360 0',
+                    dur: duration * 1000 / speedMultiplier,
+                    loop: true,
+                    easing: 'linear'
+                });
+            });
+        }
+        
+        function setupPlanetInfo() {
+            document.querySelectorAll('.clickable').forEach(planet => {
+                planet.addEventListener('click', function() {
+                    const name = this.getAttribute('data-name');
+                    const info = this.getAttribute('data-info');
+                    document.getElementById('selected-planet').innerHTML = 
+                        `<strong style="color: #4fc3f7">${name}</strong><br>${info}`;
+                    
+                    // Animación de selección
+                    this.setAttribute('animation', {
+                        property: 'scale',
+                        from: '1 1 1',
+                        to: '1.2 1.2 1.2',
+                        dur: 500,
+                        dir: 'alternate',
+                        loop: 2,
+                        easing: 'easeOutElastic'
+                    });
+                    
+                    setTimeout(() => {
+                        this.removeAttribute('animation');
+                        this.setAttribute('scale', '1 1 1');
+                    }, 1000);
+                });
+                
+                // Etiquetas
+                planet.addEventListener('mouseenter', function() {
+                    const label = this.querySelector('a-text');
+                    if (label) label.setAttribute('visible', 'true');
+                });
+                
+                planet.addEventListener('mouseleave', function() {
+                    const label = this.querySelector('a-text');
+                    if (label) label.setAttribute('visible', 'false');
+                });
+            });
+        }
+        
+        function setupControls() {
+            document.getElementById('speed-1x').addEventListener('click', () => setSpeed(1, 'speed-1x'));
+            document.getElementById('speed-10x').addEventListener('click', () => setSpeed(10, 'speed-10x'));
+            document.getElementById('speed-100x').addEventListener('click', () => setSpeed(100, 'speed-100x'));
+            
+            document.getElementById('pause').addEventListener('click', () => {
+                isPaused = !isPaused;
+                const btn = document.getElementById('pause');
+                btn.textContent = isPaused ? 'Reanudar' : 'Pausar';
+                btn.style.background = isPaused ? '#00aa00' : '#ff6600';
+                
+                document.querySelectorAll('[animation]').forEach(el => {
+                    if (isPaused) el.removeAttribute('animation');
+                    else startOrbits();
+                });
+            });
+        }
+        
+        function setSpeed(multiplier, buttonId) {
+            speedMultiplier = multiplier;
+            if (!isPaused) startOrbits();
+            updateButtonStates(buttonId);
+        }
+        
+        function updateButtonStates(activeId) {
+            ['speed-1x', 'speed-10x', 'speed-100x'].forEach(id => {
+                const btn = document.getElementById(id);
+                btn.style.background = id === activeId ? '#ff8800' : '#ff6600';
+            });
+        }
+        
+        function setupHeadTracking() {
+            const video = document.getElementById('video');
+            const cameraRig = document.getElementById('camera-rig');
+            const solarSystem = document.getElementById('solar-system');
+            
+            faceMesh = new FaceMesh({
+                locateFile: (file) => 
+                    `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
+            });
+            
+            faceMesh.onResults((results) => {
+                if (!results.multiFaceLandmarks?.[0]) return;
+                
+                const landmarks = results.multiFaceLandmarks[0];
+                const leftEye = landmarks[33];
+                const rightEye = landmarks[263];
+                
+                const eyeX = (leftEye.x + rightEye.x) / 2;
+                const eyeY = (leftEye.y + rightEye.y) / 2;
+                
+                smoothX += ((eyeX - 0.5) * 2 - smoothX) * 0.2;
+                smoothY += ((0.5 - eyeY) * 2 - smoothY) * 0.2;
+                
+                solarSystem.object3D.rotation.y = smoothX * parallaxIntensity * 0.8;
+                solarSystem.object3D.rotation.x = smoothY * parallaxIntensity * 0.6;
+                solarSystem.object3D.position.x = -smoothX * parallaxIntensity * 0.6;
+                solarSystem.object3D.position.y = smoothY * parallaxIntensity * 0.5;
+            });
+            
+            new Camera(video, {
+                onFrame: async () => await faceMesh.send({image: video}),
+                width: 640, height: 480
+            }).start().catch(() => setupMouseParallax());
+        }
+        
+        function setupMouseParallax() {
+            const solarSystem = document.getElementById('solar-system');
+            let mouseX = 0, mouseY = 0;
+            
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+                
+                solarSystem.object3D.rotation.y = mouseX * parallaxIntensity * 0.8;
+                solarSystem.object3D.rotation.x = mouseY * parallaxIntensity * 0.6;
+                solarSystem.object3D.position.x = -mouseX * parallaxIntensity * 0.6;
+                solarSystem.object3D.position.y = mouseY * parallaxIntensity * 0.5;
+            });
+        }
+        
+        function setupZoom() {
+            const solarSystem = document.getElementById('solar-system');
+            let scale = 0.9;
+            
+            document.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                scale += e.deltaY * -0.001;
+                scale = Math.max(0.4, Math.min(2.0, scale));
+                solarSystem.setAttribute('scale', `${scale} ${scale} ${scale}`);
+            });
+        }
+    </script>
+</body>
+</html>
